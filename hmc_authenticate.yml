@@ -1,0 +1,58 @@
+---
+# @@SGM - HELP ME...
+#   Unable to extract (xpath) data from the XML response - nothing works nicely. 
+#      
+
+- hosts: localhost
+  gather_facts: no
+  vars:
+    hmc_user: hscroot
+    hmc_password: 
+    hmc_url: "https://10.10.10.10:12443/rest/api"
+    lpar_name: "sgmtst01"
+    managed_system_name: "system-name-SN71234567"
+
+  tasks:
+  - name: AUTHENTICATE WITH IBM HMC REST API (*tested)
+    uri:
+      headers: 
+        Content-Type: "application/vnd.ibm.powervm.web+xml; type: LogonRequest"
+        Accept: "application/vnd.ibm.powervm.web+xml; type=LogonResponse"
+        X-Audit-Memento: "Ansible-automation: Logon request"
+      validate_certs: no
+      method: PUT
+      url: "{{ hmc_url }}/web/Logon"
+      body_format: raw
+      body: "{{ lookup('template', './Login.j2', convert_data=False) }}"
+    register: login
+
+  - name: Search for the LPAR (*tested)
+    uri:
+      headers: 
+        Accept: "application/atom+xml; charset=UTF-8"
+        Cookie: "{{ login.set_cookie }}"
+      validate_certs: no
+      return_content: yes
+      method: GET
+      url: "{{ hmc_url }}/uom/LogicalPartition/search/(PartitionName=={{ lpar_name }})"
+    register: lpar
+    ignore_errors: true
+
+  - name: Get the managed system uuid  (*tested)
+    uri:
+      headers: 
+        Accept: "application/atom+xml; charset=UTF-8"
+        Cookie: "{{ login.set_cookie }}"
+      validate_certs: no
+      return_content: yes
+      method: GET
+      url: "{{ hmc_url }}/uom/ManagedSystem/search/(SystemName=={{ managed_system_name }})"
+    register: managed_system
+    ignore_errors: true
+
+  - name: XML to JSON
+    set_fact:
+        managed_system: "{{ managed_system.content | from_xml }}"     # (*not working uri in key names)
+    #      stuff: "{{ partition.content | parse_xml('filter.yml') }}" # (*not working) 
+
+  - copy: content="{{ managed_system.content }}" dest="./debug-content-manage-system.xml"
